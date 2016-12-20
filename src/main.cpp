@@ -3,7 +3,6 @@
 #include <iostream>
 #include "video_wrapper.hpp"
 #include "frame_processor.hpp"
-#include "mat.h"
 
 int main(int argc, char *argv[]) {
 
