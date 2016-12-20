@@ -8,6 +8,8 @@ find_package(catkin REQUIRED COMPONENTS
   roscpp
   rospy
   std_msgs
+  image_transport
+  cv_bridge
 )
 
 find_package(OpenCV REQUIRED)
