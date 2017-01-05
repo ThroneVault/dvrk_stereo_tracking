@@ -12,20 +12,20 @@ int main(int argc, char *argv[]) {
   //while (1)
   //{
 
-  cout << "1) View Crop\n2)View Thresholded\n3)Start Tracking\n Ctrl-C to exit";
+  cout << "1) View Cropped Image\n2) View Thresholded Image\n3) Start Tracking\n Ctrl-C to exit";
   int option;
   //cin >> option;
 
   //switch (option)
   //{
   //case 1: cout << "1 selected";
-  //viewCrop();
+  //st.ViewCrop();
   //break;
   //case 2: cout << "2 selected";
-  st.ViewThresholded();
+  //st.ViewThresholded();
   //break;
   //case 2: cout << "2 selected";
-  //st.TrackBlob();
+  st.TrackBlob();
   //break;
   //case 0: exit(0);
   //break;
