@@ -7,19 +7,6 @@
 #include <image_transport/image_transport.h>
 #include <cv_bridge/cv_bridge.h>
 
-void imageCallback(const sensor_msgs::ImageConstPtr& msg)
-{
-  try
-  {
-    cv::imshow("view", cv_bridge::toCvShare(msg, "bgr8")->image);
-    cv::waitKey(30);
-  }
-  catch (cv_bridge::Exception& e)
-  {
-    ROS_ERROR("Could not convert from '%s' to 'bgr8'.", msg->encoding.c_str());
-  }
-}
-
 int main(int argc, char *argv[]) {
 
 
@@ -33,17 +20,10 @@ int main(int argc, char *argv[]) {
    */
 
 
-  ros::init(argc, argv, "image_listener");
-  ros::NodeHandle nh;
-  cv::namedWindow("view");
-  cv::startWindowThread();
-  image_transport::ImageTransport it(nh);
-  //string left_camera_topic ("/stereo/left/uvc_camera_stereo_left/camera_info_url");
-  string left_camera_topic ("/stereo/left/image_rect_color");
-  image_transport::Subscriber sub = it.subscribe(left_camera_topic, 1, imageCallback);
 
+      ros::init(argc, argv, "image_listener");
 
-  //VideoWrapper left_vw = VideoWrapper(argv[1]);
+  VideoWrapper left_vw = VideoWrapper();
   //FrameProcessor left_fp = FrameProcessor();
 
   //VideoWrapper right_vw = VideoWrapper(argv[2]);
@@ -71,8 +51,8 @@ int main(int argc, char *argv[]) {
     //right_center = right_fp.GetRedCenter(right_frame);
     //right_thresholded_frame = right_fp.GetThresholdedImage(right_frame);
     //cout << "right_center is [" << right_center.x << "," << right_center.y << "]"<< endl;
-    //imshow("right", right_thresholded_frame);
-    //waitKey(0);
+    imshow("right", left_vw.GetFrame());
+    waitKey(0);
 
     //// open camera matrix and triangulate point
 
