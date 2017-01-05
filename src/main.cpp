@@ -26,7 +26,6 @@ int main(int argc, char *argv[]) {
   /*
    * TODO
    *
-   * Convert to use bagfile directly
    * convert to catkin project
    * publish topic directly
    * write python code to publish to transform
@@ -78,6 +77,22 @@ int main(int argc, char *argv[]) {
     //// open camera matrix and triangulate point
 
   //}
+  //
+  
+  cout << "1) Set Crop\n2) View Crop\n3)Set Color\n4)View Color\n5)Start Tracking\nPress Ctrl-C to exit";
+  int option;
+  cin >> option;
+
+  switch (option)
+  {
+    case 1: cout << "1 selected";
+            break;
+    case 2: cout << "2 selected";
+            break;
+    default: cout << "invalid option";
+            break;
+  }
+
 
   return 0;
 }

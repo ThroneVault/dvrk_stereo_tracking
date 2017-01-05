@@ -132,7 +132,7 @@ include_directories(
 # add_dependencies(dvrk_stereo_tracking ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Declare a C++ executable
- add_executable(dvrk_stereo_tracking_node src/main.cpp)
+ add_executable(dvrk_stereo_tracking_node src/dvrk_stereo_tracking_node.cpp)
 
 ## Add cmake target dependencies of the executable
 ## same as for the library above
