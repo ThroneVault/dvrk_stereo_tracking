@@ -8,11 +8,25 @@ find_package(catkin REQUIRED COMPONENTS
   roscpp
   rospy
   std_msgs
+  geometry_msgs
   image_transport
   cv_bridge
+  roslib
 )
 
 find_package(OpenCV REQUIRED)
+find_package(Eigen3 REQUIRED)
+
+if(NOT EIGEN3_FOUND)
+  # Fallback to cmake_modules
+  find_package(cmake_modules REQUIRED)
+  find_package(Eigen REQUIRED)
+  set(EIGEN3_INCLUDE_DIRS ${EIGEN_INCLUDE_DIRS})
+  set(EIGEN3_LIBRARIES ${EIGEN_LIBRARIES})  # Not strictly necessary as Eigen is head only
+  # Possibly map additional variables to the EIGEN3_ prefix.
+else()
+  set(EIGEN3_INCLUDE_DIRS ${EIGEN3_INCLUDE_DIR})
+endif()
 
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
@@ -104,9 +118,9 @@ find_package(OpenCV REQUIRED)
 ## CATKIN_DEPENDS: catkin_packages dependent projects also need
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
-#  INCLUDE_DIRS include
+  INCLUDE_DIRS include ${EIGEN3_INCLUDE_DIRS}
 #  LIBRARIES dvrk_stereo_tracking
-#  CATKIN_DEPENDS roscpp rospy std_msgs
+  CATKIN_DEPENDS roscpp rospy std_msgs roslib geometry_msgs
 #  DEPENDS system_lib
 )
 
@@ -119,6 +133,7 @@ catkin_package(
 # include_directories(include)
 include_directories(
   ${catkin_INCLUDE_DIRS}
+  ${EIGEN3_INCLUDE_DIRS}
 )
 
 ## Declare a C++ library
@@ -133,6 +148,7 @@ include_directories(
 
 ## Declare a C++ executable
  add_executable(dvrk_stereo_tracking_node src/main.cpp src/stereo_tracking.cpp)
+ add_executable(kalman_filter_node src/kalman_filter.cpp)
 
 ## Add cmake target dependencies of the executable
 ## same as for the library above
@@ -142,4 +158,10 @@ include_directories(
  target_link_libraries(dvrk_stereo_tracking_node
    ${catkin_LIBRARIES}
    ${OpenCV_LIBS}
+ )
+
+ target_link_libraries(kalman_filter_node
+   ${catkin_LIBRARIES}
+   ${OpenCV_LIBS}
+   ${EIGEN3_LIBRARIES}
  )

@@ -2,7 +2,9 @@
 #include "opencv2/opencv.hpp"
 #include <iostream>
 #include <ros/ros.h>
+#include <ros/package.h>
 #include "std_msgs/Int8.h"
+#include "geometry_msgs/Point.h"
 #include <image_transport/image_transport.h>
 #include <cv_bridge/cv_bridge.h>
 
@@ -29,6 +31,7 @@ class StereoTracking
     Point GetCenter (Mat input_frame);
     Mat GetCroppedImage(Mat input_bgr_frame, Rect crop_rect);
     Mat DrawCrosshair(Mat input_frame, Point center);
+    void TriangulatePoints();
 
   private:
     bool flag_;
@@ -47,11 +50,12 @@ class StereoTracking
 
     Mat input_hsv_frame, lower_red_hue_range;
     Publisher left_xy_pub, right_xy_pub;
-    std_msgs::Int8 left_xy, right_xy;
+    geometry_msgs::Point left_xy, right_xy;
 
     int left_x, left_y;
     int right_x, right_y;
 
     int min_points_;
+    Mat projection_matrix_left_, projection_matrix_right_;
 };
 
