@@ -30,6 +30,8 @@ StereoTracking::StereoTracking() {
   FileStorage fs_right(parameters_right_path, FileStorage::READ);
   fs_right["projection_matrix"] >> projection_matrix_right_;
   cout << "projection_matrix_right_" << projection_matrix_right_;
+
+
 }
 
 void StereoTracking::StoreImageCb(const sensor_msgs::ImageConstPtr& msg)
@@ -44,6 +46,91 @@ void StereoTracking::StoreImageCb(const sensor_msgs::ImageConstPtr& msg)
   {
     ROS_ERROR("Could not convert from '%s' to 'bgr8'.", msg->encoding.c_str());
   }
+}
+
+void StereoTracking::MouseHandlerStatic(int event, int x, int y, int flags, void* that)
+{
+  // below code is to bypass opencv restriction of not allowing non-static member callbacks. TODO - understand
+  StereoTracking* temp = reinterpret_cast<StereoTracking*>(that);
+  temp->MouseHandler(event, x, y, flags);
+}
+
+void StereoTracking::MouseHandler(int event, int x, int y, int flags)
+{
+    if (event == CV_EVENT_LBUTTONDOWN && !drag && !select_flag)
+    {
+        /* left button clicked. ROI selection begins */
+        point1 = cv::Point(x, y);
+        drag = 1;
+    }
+
+    if (event == CV_EVENT_MOUSEMOVE && drag && !select_flag)
+    {
+        /* mouse dragged. ROI being selected */
+        cv::Mat img1 = frame_.clone();
+        point2 = cv::Point(x, y);
+        cv::rectangle(img1, point1, point2, CV_RGB(255, 0, 0), 3, 8, 0);
+        cv::imshow(src_window, img1);
+    }
+
+    if (event == CV_EVENT_LBUTTONUP && drag && !select_flag)
+    {
+        cv::Mat img2 = frame_.clone();
+        point2 = cv::Point(x, y);
+        drag = 0;
+        select_flag = 1;
+        cv::imshow(src_window, img2);
+        callback = true;
+        if ((current_camera_) == LEFT)
+          left_crop_rect_ = Rect(point1, point2);
+        else
+          right_crop_rect_ = Rect(point1, point2);
+        destroyWindow(src_window);
+    }
+}
+
+void StereoTracking::SetCrop() {
+  image_transport::ImageTransport it(nh_);
+
+  flag_ = false;
+  current_camera_ = LEFT;
+  drag = 0;
+  select_flag = 0;
+  src_window = "Select ROI";
+  callback = false;
+  sub_ = it.subscribe("/stereo/left/image_rect_color", 1, &StereoTracking::StoreImageCb, this);
+
+  while (!flag_)
+  {
+    ros::spinOnce();
+  }
+
+  frame_ = cv_ptr_->image;
+  cv::namedWindow( src_window, CV_WINDOW_AUTOSIZE);
+  cv::imshow(src_window, frame_);
+  cv::setMouseCallback(src_window, StereoTracking::MouseHandlerStatic, this);
+  cv::waitKey(0);
+
+
+  flag_ = false;
+  drag = 0;
+  select_flag = 0;
+  src_window = "Select ROI";
+  callback = false;
+  current_camera_ = RIGHT;
+  sub_ = it.subscribe("/stereo/right/image_rect_color", 1, &StereoTracking::StoreImageCb, this);
+
+  while (!flag_)
+  {
+    ros::spinOnce();
+  }
+
+  frame_ = cv_ptr_->image;
+  cv::namedWindow( src_window, CV_WINDOW_AUTOSIZE);
+  cv::imshow(src_window, frame_);
+  cv::setMouseCallback(src_window, StereoTracking::MouseHandlerStatic, this);
+  cv::waitKey(0);
+
 }
 
 void StereoTracking::ViewCrop() {

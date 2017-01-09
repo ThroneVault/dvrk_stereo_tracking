@@ -18,14 +18,16 @@ int main(int argc, char *argv[]) {
 
   //switch (option)
   //{
+  st.SetCrop();
   //case 1: cout << "1 selected";
-  //st.ViewCrop();
+  cout << endl;
+  st.ViewCrop();
   //break;
   //case 2: cout << "2 selected";
   //st.ViewThresholded();
   //break;
   //case 2: cout << "2 selected";
-  st.TrackBlob();
+  //st.TrackBlob();
   //break;
   //case 0: exit(0);
   //break;
@@ -33,6 +35,7 @@ int main(int argc, char *argv[]) {
   //break;
   //}
   //}
+  //
 
 
   return 0;

@@ -12,6 +12,8 @@ using namespace cv;
 using namespace ros;
 using namespace std;
 
+enum CameraSide { LEFT, RIGHT };
+
 class StereoTracking
 {
   public:
@@ -19,7 +21,10 @@ class StereoTracking
 
     void StoreImageCb(const sensor_msgs::ImageConstPtr& msg);
 
+    void SetCrop();
     void ViewCrop();
+    static void MouseHandlerStatic(int event, int x, int y, int flags, void* that);
+    void MouseHandler(int event, int x, int y, int flags);
 
     void ViewThresholded();
 
@@ -57,5 +62,13 @@ class StereoTracking
 
     int min_points_;
     Mat projection_matrix_left_, projection_matrix_right_;
+
+    int drag, select_flag;
+
+    cv::Point point1, point2;    
+    //cv::Mat frame;
+    const char* src_window;
+    bool callback;
+    CameraSide current_camera_;
 };
 
