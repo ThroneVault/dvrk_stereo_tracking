@@ -14,6 +14,10 @@ StereoTracking::StereoTracking() {
   bgr_upper_threshold_ = cv::Scalar(167, 225, 200);
   //hsv_lower_threshold_ = cv::Scalar(0, 100, 100);
   //hsv_upper_threshold_ = cv::Scalar(10, 255, 255);
+  
+  stem_hsv_lower_threshold_ = cv::Scalar(14, 0, 37);
+  stem_hsv_upper_threshold_ = cv::Scalar(100, 58, 51);
+
   left_x = -1;
   left_y = -1;
 
@@ -275,36 +279,72 @@ Mat StereoTracking::DrawCrosshair(Mat input_frame, Point center)
 //{
 //}
 
-//Mat StereoTracking::FitLine (Mat input_frame)
-//{
-//}
+void StereoTracking::DrawLine(Mat img, Vec4f line_params, int thickness, Scalar color)
+{
+    //double theMult = max(img.rows,img.cols);
+    //cout << "theMult " << theMult << endl << endl;
+    //// calculate start point
+    //Point startPoint;
+    //startPoint.x = line_params[2]- theMult*line_params[0];// x0
+    //startPoint.y = line_params[3] - theMult*line_params[1];// y0
+    //cout << "startPoint " << startPoint;
+    //// calculate end point
+    //Point endPoint;
+    //endPoint.x = line_params[2]+ theMult*line_params[0];//x[1]
+    //endPoint.y = line_params[3] + theMult*line_params[1];//y[1]
+    //cout << "endPoint " << startPoint;
 
-//Mat StereoTracking::SegmentStem (const sensor_msgs::ImageConstPtr& msg) 
-//{
-//}
+    //// draw overlay of bottom line_paramss on image
+    ////cvClipLine(cvGetSize(img), &startPoint, &endPoint);
+    //line(img, startPoint, endPoint, color, thickness, 8, 0);
+    //
+    
+    float large_val = 500;
+    
+    Point startPoint;
+    startPoint.x = line_params[2]- large_val * line_params[0];// x0 - m*vx
+    startPoint.y = line_params[3] - large_val * line_params[1];// 
+    cout << "startPoint " << startPoint;
+     //calculate end point
+     
+    Point endPoint;
+    endPoint.x = line_params[2]+ large_val*line_params[0];//x[1]
+    endPoint.y = line_params[3] + large_val*line_params[1];//y[1]
+    cout << "endPoint " << startPoint;
+    
+    Mat rgb;
+    cvtColor(img, rgb, CV_GRAY2BGR); 
+    //line(rgb, Point (0,0), Point (100,100), Scalar(0,0,255), 3, 8, 0);
+    line(rgb, startPoint, endPoint, Scalar(0,0,255), 3, 8, 0);
 
-void StereoTracking::TrackBlobLeftCb(const sensor_msgs::ImageConstPtr& msg) {
-
-  Mat input_frame, input_hsv_frame, lower_red_hue_range;
-  input_frame = GetCroppedImage(cv_bridge::toCvCopy(msg, "bgr8") -> image, left_crop_rect_);
-  input_frame = GetRGBThresholdedImage(input_frame);
-
-  Point center = GetCenter(input_frame);
-
-  // TODO fix. too naive
-  left_x = center.x;
-  left_y = center.y;
-
-  input_frame = DrawCrosshair(cv_bridge::toCvCopy(msg, "bgr8") -> image, center);
-
-  cv::imshow("left", input_frame);
-  cv::waitKey(10);
-
-  left_xy.x = center.x;
-  left_xy.y = center.y;
-  left_xy.z = -1;
-  left_xy_pub.publish(left_xy);
+    cv::imshow("DrawLine", rgb);
+    cv::waitKey(10);
 }
+
+void StereoTracking::FitLine (Mat input_frame)
+{
+
+  std::vector<cv::Point2i> locations;   // output, locations of non-zero pixels 
+  cv::findNonZero(input_frame, locations);
+
+  Vec4f line_params;
+  fitLine(locations, line_params, CV_DIST_L2, 0, 0.01, 0.01);
+
+  cout << "line parameters is " << line_params << endl;
+
+  DrawLine(input_frame, line_params, 10, CV_RGB(255, 0, 0));
+
+}
+
+Mat StereoTracking::SegmentStem (Mat input_frame) 
+{
+  Mat input_hsv_frame;
+  Mat segmented_stem;
+  cv::cvtColor(input_frame, input_hsv_frame, cv::COLOR_BGR2HSV);
+  cv::inRange(input_hsv_frame, stem_hsv_lower_threshold_, stem_hsv_upper_threshold_, segmented_stem);
+  return segmented_stem;
+}
+
 
 void StereoTracking::TriangulatePoints()
 {
@@ -324,6 +364,35 @@ void StereoTracking::TriangulatePoints()
   cout << "projection_matrix_right_" << projection_matrix_right_ << endl;
 
   cout << "triangulated Point is " << point4D <<endl;
+}
+
+void StereoTracking::TrackBlobLeftCb(const sensor_msgs::ImageConstPtr& msg) {
+
+  Mat input_frame, input_hsv_frame, lower_red_hue_range;
+  input_frame = GetCroppedImage(cv_bridge::toCvCopy(msg, "bgr8") -> image, left_crop_rect_);
+
+  Mat segmented_stem = SegmentStem(input_frame);
+  FitLine(segmented_stem);
+
+
+  //input_frame = GetRGBThresholdedImage(input_frame);
+
+  //Point center = GetCenter(input_frame);
+
+  //// TODO fix. too naive
+  //left_x = center.x;
+  //left_y = center.y;
+
+  //input_frame = DrawCrosshair(cv_bridge::toCvCopy(msg, "bgr8") -> image, center);
+
+  ////cv::imshow("left", input_frame);
+  //cv::imshow("left", segmented_stem);
+  //cv::waitKey(10);
+
+  //left_xy.x = center.x;
+  //left_xy.y = center.y;
+  //left_xy.z = -1;
+  //left_xy_pub.publish(left_xy);
 }
 
 void StereoTracking::TrackBlobRightCb(const sensor_msgs::ImageConstPtr& msg) {
@@ -357,7 +426,7 @@ void StereoTracking::TrackBlob()
 {
   image_transport::ImageTransport it(nh_);
   image_transport::Subscriber left_sub = it.subscribe("/stereo/left/image_rect_color", 1, &StereoTracking::TrackBlobLeftCb, this);
-  image_transport::Subscriber right_sub = it.subscribe("/stereo/right/image_rect_color", 1, &StereoTracking::TrackBlobRightCb, this);
+  //image_transport::Subscriber right_sub = it.subscribe("/stereo/right/image_rect_color", 1, &StereoTracking::TrackBlobRightCb, this);
 
   ros::spin();
 }

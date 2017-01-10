@@ -37,6 +37,9 @@ class StereoTracking
     Mat GetCroppedImage(Mat input_bgr_frame, Rect crop_rect);
     Mat DrawCrosshair(Mat input_frame, Point center);
     void TriangulatePoints();
+    Mat SegmentStem (Mat input_frame);
+    void FitLine (Mat input_frame);
+    void DrawLine(Mat img, Vec4f line_params, int thickness, Scalar color);
 
   private:
     bool flag_;
@@ -45,6 +48,7 @@ class StereoTracking
     image_transport::Subscriber sub_;
 
     cv::Scalar hsv_lower_threshold_, hsv_upper_threshold_;
+    cv::Scalar stem_hsv_lower_threshold_, stem_hsv_upper_threshold_;
     cv::Scalar bgr_lower_threshold_, bgr_upper_threshold_;
 
     Mat frame_;
