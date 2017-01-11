@@ -38,8 +38,9 @@ class StereoTracking
     Mat DrawCrosshair(Mat input_frame, Point center);
     void TriangulatePoints();
     Mat SegmentStem (Mat input_frame);
-    void FitLine (Mat input_frame);
+    Vec4f FitLine (Mat input_frame);
     void DrawLine(Mat img, Vec4f line_params, int thickness, Scalar color);
+    Point GetClosestPoint(Mat input_frame, Vec4f line_params);
 
   private:
     bool flag_;
@@ -58,8 +59,8 @@ class StereoTracking
     Mat binary_mask_;
 
     Mat input_hsv_frame, lower_red_hue_range;
-    Publisher left_xy_pub, right_xy_pub;
-    geometry_msgs::Point left_xy, right_xy;
+    Publisher left_xy_pub, right_xy_pub, raw_xyz_pub;
+    geometry_msgs::Point left_xy, right_xy, raw_xyz;
 
     int left_x, left_y;
     int right_x, right_y;

@@ -7,6 +7,7 @@ StereoTracking::StereoTracking() {
   right_crop_rect_ = Rect(150, 50, 275, 430);
   left_xy_pub = nh_.advertise<geometry_msgs::Point>("left_xy", 5);
   right_xy_pub = nh_.advertise<geometry_msgs::Point>("right_xy", 5);
+  raw_xyz_pub = nh_.advertise<geometry_msgs::Point>("raw_xyz", 5);
   hsv_lower_threshold_ = cv::Scalar(60, 89, 185);
   hsv_upper_threshold_ = cv::Scalar(86, 64, 225);
 
@@ -28,12 +29,12 @@ StereoTracking::StereoTracking() {
   String parameters_left_path = ros::package::getPath("dvrk_stereo_tracking") + "/stereo_cam0_opencv.yaml";
   FileStorage fs_left(parameters_left_path, FileStorage::READ);
   fs_left["projection_matrix"] >> projection_matrix_left_;
-  cout << "projection_matrix_left_" << projection_matrix_left_;
+  //cout << "projection_matrix_left_" << projection_matrix_left_;
 
-  String parameters_right_path = ros::package::getPath("dvrk_stereo_tracking") + "/stereo_cam0_opencv.yaml";
+  String parameters_right_path = ros::package::getPath("dvrk_stereo_tracking") + "/stereo_cam1_opencv.yaml";
   FileStorage fs_right(parameters_right_path, FileStorage::READ);
   fs_right["projection_matrix"] >> projection_matrix_right_;
-  cout << "projection_matrix_right_" << projection_matrix_right_;
+  //cout << "projection_matrix_right_" << projection_matrix_right_;
 
 
 }
@@ -231,6 +232,8 @@ Mat StereoTracking::GetCroppedImage(Mat input_bgr_frame, Rect crop_rect)
 Point StereoTracking::GetCenter (Mat input_frame)
 {
   std::vector<cv::Point2i> locations;   // output, locations of non-zero pixels 
+
+  // TODO exception handling
   cv::findNonZero(input_frame, locations);
 
   long int sum_x = 0, sum_y =0;
@@ -299,7 +302,7 @@ void StereoTracking::DrawLine(Mat img, Vec4f line_params, int thickness, Scalar 
     //line(img, startPoint, endPoint, color, thickness, 8, 0);
     //
     
-    float large_val = 500;
+    float large_val = max(img.rows, img.cols);
     
     Point startPoint;
     startPoint.x = line_params[2]- large_val * line_params[0];// x0 - m*vx
@@ -308,8 +311,8 @@ void StereoTracking::DrawLine(Mat img, Vec4f line_params, int thickness, Scalar 
      //calculate end point
      
     Point endPoint;
-    endPoint.x = line_params[2]+ large_val*line_params[0];//x[1]
-    endPoint.y = line_params[3] + large_val*line_params[1];//y[1]
+    endPoint.x = line_params[2] - 400*line_params[0];//x[1]
+    endPoint.y = line_params[3] - 400*line_params[1];//y[1]
     cout << "endPoint " << startPoint;
     
     Mat rgb;
@@ -321,7 +324,7 @@ void StereoTracking::DrawLine(Mat img, Vec4f line_params, int thickness, Scalar 
     cv::waitKey(10);
 }
 
-void StereoTracking::FitLine (Mat input_frame)
+Vec4f StereoTracking::FitLine (Mat input_frame)
 {
 
   std::vector<cv::Point2i> locations;   // output, locations of non-zero pixels 
@@ -329,10 +332,11 @@ void StereoTracking::FitLine (Mat input_frame)
 
   Vec4f line_params;
   fitLine(locations, line_params, CV_DIST_L2, 0, 0.01, 0.01);
+  return line_params;
 
-  cout << "line parameters is " << line_params << endl;
+  //cout << "line parameters is " << line_params << endl;
 
-  DrawLine(input_frame, line_params, 10, CV_RGB(255, 0, 0));
+  //DrawLine(input_frame, line_params, 10, CV_RGB(255, 0, 0));
 
 }
 
@@ -348,53 +352,113 @@ Mat StereoTracking::SegmentStem (Mat input_frame)
 
 void StereoTracking::TriangulatePoints()
 {
-  cv::Mat point4D(4, 1, CV_32FC1);
+  Mat point4D;
 
-  float c0[] = {left_x, left_y};
-  cv::Mat cam0pnts(2,1,CV_32FC1, c0);
-  cout << "cam0pnts" << cam0pnts << endl;
-
-  float c1[] = {right_x, right_y};
-  cv::Mat cam1pnts(2,1,CV_32FC1, c1);
-  cout << "cam1pnts" << cam1pnts << endl;
+  vector <Point2f> cam0pnts, cam1pnts;
+  cam0pnts.push_back(Point2f(left_x, left_y));
+  cam1pnts.push_back(Point2f(right_x, right_y));
 
   cv::triangulatePoints(projection_matrix_left_,projection_matrix_right_,cam0pnts,cam1pnts,point4D);
 
   cout << "projection_matrix_left_" << projection_matrix_left_ << endl;
   cout << "projection_matrix_right_" << projection_matrix_right_ << endl;
+  cout << "cam0pnts = " << cam0pnts << endl;
+  cout << "cam1pnts = " << cam1pnts << endl;
 
   cout << "triangulated Point is " << point4D <<endl;
+  cout << "----\n";
+
+  raw_xyz.x = point4D.at<float>(0,0) / point4D.at<float>(0,3);
+  raw_xyz.y = point4D.at<float>(0,1) / point4D.at<float>(0,3);
+  raw_xyz.z = point4D.at<float>(0,2) / point4D.at<float>(0,3);
+  raw_xyz_pub.publish(raw_xyz);
 }
 
-void StereoTracking::TrackBlobLeftCb(const sensor_msgs::ImageConstPtr& msg) {
+Point StereoTracking::GetClosestPoint(Mat input_frame, Vec4f line_params)
+{
 
-  Mat input_frame, input_hsv_frame, lower_red_hue_range;
-  input_frame = GetCroppedImage(cv_bridge::toCvCopy(msg, "bgr8") -> image, left_crop_rect_);
+  std::vector<cv::Point2i> locations;   // output, locations of non-zero pixels 
+  cv::findNonZero(input_frame, locations);
 
-  Mat segmented_stem = SegmentStem(input_frame);
-  FitLine(segmented_stem);
+  float large_val = max(input_frame.rows, input_frame.cols);
+  
+  Point startPoint;
+  startPoint.x = line_params[2]- large_val * line_params[0];// x0 - m*vx
+  startPoint.y = line_params[3] - large_val * line_params[1];// 
+  cout << "startPoint " << startPoint.x << startPoint.y;
 
+  Point2i closest_point;
+  float shortest_dist = 999;
+
+  for (vector <Point2i>::iterator it = locations.begin(); it != locations.end(); it++)
+  {
+    if (shortest_dist > norm(startPoint - *it))
+    {
+      closest_point = *it;
+      shortest_dist = norm(startPoint - *it);
+    }
+  }
+
+  return closest_point;
+
+}
+
+
+// wip still testing
+//void StereoTracking::TrackBlobLeftCb(const sensor_msgs::ImageConstPtr& msg) {
+
+  //Mat input_frame, input_hsv_frame, lower_red_hue_range;
+  //input_frame = GetCroppedImage(cv_bridge::toCvCopy(msg, "bgr8") -> image, left_crop_rect_);
+
+  //Mat segmented_stem = SegmentStem(input_frame);
+  //Vec4f line_params = FitLine(segmented_stem);
+
+  //cout << "line_params " << line_params << endl;
 
   //input_frame = GetRGBThresholdedImage(input_frame);
 
-  //Point center = GetCenter(input_frame);
+  //Point closest_point = GetClosestPoint(input_frame, line_params);
 
-  //// TODO fix. too naive
+  ////Point center = GetCenter(input_frame);
+  //Point center = closest_point;
+
+  ////// TODO fix. too naive
   //left_x = center.x;
   //left_y = center.y;
 
   //input_frame = DrawCrosshair(cv_bridge::toCvCopy(msg, "bgr8") -> image, center);
 
-  ////cv::imshow("left", input_frame);
-  //cv::imshow("left", segmented_stem);
+  //cv::imshow("left", input_frame);
+  ////cv::imshow("left", segmented_stem);
   //cv::waitKey(10);
 
-  //left_xy.x = center.x;
-  //left_xy.y = center.y;
-  //left_xy.z = -1;
-  //left_xy_pub.publish(left_xy);
-}
+  ////left_xy.x = center.x;
+  ////left_xy.y = center.y;
+  ////left_xy.z = -1;
+  ////left_xy_pub.publish(left_xy);
+//}
 
+
+void StereoTracking::TrackBlobLeftCb(const sensor_msgs::ImageConstPtr& msg) {
+
+  Mat input_frame, input_hsv_frame, lower_red_hue_range;
+  input_frame = GetCroppedImage(cv_bridge::toCvCopy(msg, "bgr8") -> image, left_crop_rect_);
+  input_frame = GetRGBThresholdedImage(input_frame);
+
+  Point center = GetCenter(input_frame);
+  left_x = center.x;
+  left_y = center.y;
+
+  input_frame = DrawCrosshair(cv_bridge::toCvCopy(msg, "bgr8") -> image, center);
+
+  cv::imshow("left", input_frame);
+  cv::waitKey(10);
+
+  left_xy.x = center.x;
+  left_xy.y = center.y;
+  left_xy.z = -1;
+  left_xy_pub.publish(left_xy);
+}
 void StereoTracking::TrackBlobRightCb(const sensor_msgs::ImageConstPtr& msg) {
 
   Mat input_frame, input_hsv_frame, lower_red_hue_range;
@@ -426,7 +490,7 @@ void StereoTracking::TrackBlob()
 {
   image_transport::ImageTransport it(nh_);
   image_transport::Subscriber left_sub = it.subscribe("/stereo/left/image_rect_color", 1, &StereoTracking::TrackBlobLeftCb, this);
-  //image_transport::Subscriber right_sub = it.subscribe("/stereo/right/image_rect_color", 1, &StereoTracking::TrackBlobRightCb, this);
+  image_transport::Subscriber right_sub = it.subscribe("/stereo/right/image_rect_color", 1, &StereoTracking::TrackBlobRightCb, this);
 
   ros::spin();
 }
