@@ -15,9 +15,11 @@ from sensor_msgs.msg import CameraInfo
 from cv_bridge import CvBridge, CvBridgeError
 from IPython import embed
 import scipy.io
+import time
 
 import tf.transformations
 
+NUM_ARM_POSES = 5
 
 class MyWindow(QtGui.QMainWindow):
     def __init__(self):
@@ -87,12 +89,13 @@ class MyWindow(QtGui.QMainWindow):
         self.recorded_toolcenter_poses = np.empty((4,4))
 
         self.counter = 0
-        self.recording = False
+        self.arm_pose_counter = 0
         self.show_segmented = True 
         self.transform_loaded = False
 
         self.current_bulbcenter_position = (0,0,0)
         self.toolcenter_pose = np.identity(4)
+
 
     def hSliderChanged(self, val):
         self.ui.hSpinBox.setValue(val)
@@ -121,12 +124,11 @@ class MyWindow(QtGui.QMainWindow):
     def startRecordingCallback(self):
         self.ui.stopRecordingPushButton.setEnabled(True)
         self.ui.startRecordingPushButton.setEnabled(False)
-        self.recording = True
         self.ui.importPointsPushButton.setEnabled(False)
+        self.automatic_registration_routine()
 
     def stopRecordingCallback(self):
         self.ui.stopRecordingPushButton.setEnabled(False)
-        self.recording = False
         self.ui.exportPointsPushButton.setEnabled(True)
         self.ui.generateTransformPushButton.setEnabled(True)
 
@@ -350,7 +352,7 @@ class MyWindow(QtGui.QMainWindow):
             self.emit(SIGNAL("updateError"))
 
 
-    def image_r_callback(self,data):
+    def image_r_callback(self, data):
         try:
             self.imageR = self.bridge.imgmsg_to_cv2(data, "bgr8")
         except CvBridgeError as e:
@@ -374,31 +376,57 @@ class MyWindow(QtGui.QMainWindow):
             cv2.circle(self.imageL,point2D,5,(0,255,0),-1)
         
         self.emit(SIGNAL("updateRight"))
+
+        # TEST ONLY TODO
+        self.automatic_registration_routine()
         
-        centerL = self.get_centroid(self.segmentedL)
-        centerR = self.get_centroid(self.segmentedR)
+    def compute_ballcenter_3D_position(self):
+        # centerL = self.get_centroid(self.segmentedL)
+        # centerR = self.get_centroid(self.segmentedR)
         
-        if(centerL != None and centerR != None):
+        # if(centerL != None and centerR != None):
 
-            a = (self.cam_model.projectPixelTo3d(centerL,centerL[0] - centerR[0]))
-            self.current_stereo_position = np.array([[a[0], a[1], a[2]]])
+            # a = (self.cam_model.projectPixelTo3d(centerL,centerL[0] - centerR[0]))
+            # self.current_stereo_position = np.array([[a[0], a[1], a[2]]])
 
-            if(self.recording):
-                # print(self.cam_model.projectPixelTo3d(centerL,centerL[0] - centerR[0]))
+            # if(self.recording):
+                # # print(self.cam_model.projectPixelTo3d(centerL,centerL[0] - centerR[0]))
 
-                self.recorded_stereo_positions = np.append(self.recorded_stereo_positions, 
-                        np.array([[ a[0], a[1], a[2]]]), axis = 0)
+                # self.recorded_stereo_positions = np.append(self.recorded_stereo_positions, 
+                        # np.array([[ a[0], a[1], a[2]]]), axis = 0)
 
-                self.recorded_kinematic_positions = np.append(self.recorded_kinematic_positions, 
-                        np.array([[ stored_position[0], stored_position[1], stored_position[2]]]), axis = 0)
+                # self.recorded_kinematic_positions = np.append(self.recorded_kinematic_positions, 
+                        # np.array([[ stored_position[0], stored_position[1], stored_position[2]]]), axis = 0)
 
-                self.recorded_toolcenter_poses = np.append(self.recorded_toolcenter_poses, 
-                       stored_toolcenter_pose, axis = 0)
+                # self.recorded_toolcenter_poses = np.append(self.recorded_toolcenter_poses, 
+                       # stored_toolcenter_pose, axis = 0)
 
-                self.counter = self.counter + 1
+                # self.counter = self.counter + 1
 
-                if self.counter % 10 == 0:
-                    self.ui.capturedPairsLineEdit.setText(str(self.counter))
+                # if self.counter % 10 == 0:
+                    # self.ui.capturedPairsLineEdit.setText(str(self.counter))
+        print "compute_ballcenter_3D_position called"
+        pass
+
+    def move_arm_to_poses(self):
+        # read from table. if out of range. quit
+        time.sleep(5)
+        print "move_arm_to_poses called"
+        self.arm_pose_counter += 1
+
+    def automatic_registration_routine(self):
+
+        # repeat steps below
+
+        if self.arm_pose_counter < NUM_ARM_POSES:
+
+            # Make robot goto zero position first
+
+            for i in range(0, NUM_ARM_POSES):
+                print i
+                self.move_arm_to_poses()
+                self.compute_ballcenter_3D_position()
+
         
     def horns_method(self, q, p):
 
