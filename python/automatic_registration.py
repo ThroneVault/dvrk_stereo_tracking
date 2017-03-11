@@ -16,10 +16,15 @@ from cv_bridge import CvBridge, CvBridgeError
 from IPython import embed
 import scipy.io
 import time
-
+import pickle
+import os.path
+import sys
 import tf.transformations
 
 NUM_ARM_POSES = 5
+
+# TODO put arm poses here.
+
 
 class MyWindow(QtGui.QMainWindow):
     def __init__(self):
@@ -95,6 +100,8 @@ class MyWindow(QtGui.QMainWindow):
 
         self.current_bulbcenter_position = (0,0,0)
         self.toolcenter_pose = np.identity(4)
+
+        pickle.dump(self.pose_list, open( "pose_list.p", "wb"))
 
 
     def hSliderChanged(self, val):
