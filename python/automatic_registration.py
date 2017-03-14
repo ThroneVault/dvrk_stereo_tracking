@@ -25,11 +25,10 @@ NUM_ARM_POSES = 5
 
 # TODO put arm poses here.
 
-
-class MyWindow(QtGui.QMainWindow):
+class AutomaticRegistration(QtGui.QMainWindow):
     def __init__(self):
         self.failed = True
-        super(MyWindow, self).__init__()
+        super(AutomaticRegistration, self).__init__()
         rospy.init_node('tool_tracker', anonymous=True)
 
         self.bridge = CvBridge()
@@ -98,10 +97,14 @@ class MyWindow(QtGui.QMainWindow):
         self.show_segmented = True 
         self.transform_loaded = False
 
-        self.current_bulbcenter_position = (0,0,0)
+        # Initialize bulb_position
+        self.bulb_position = (0,0,0)
         self.toolcenter_pose = np.identity(4)
 
+        # Open cached poses from file. These are the registration poses
         pickle.dump(self.pose_list, open( "pose_list.p", "wb"))
+
+        self.bulb_position_correspondence_array = []
 
 
     def hSliderChanged(self, val):
@@ -210,6 +213,28 @@ class MyWindow(QtGui.QMainWindow):
         else:
             self.show_segmented = False
 
+    def mask(self,img):
+        # Convert to HSV and mask colors
+
+        h = self.ui.hSlider.value()
+        sMin = self.ui.sMinSlider.value()
+        vMin = self.ui.vMinSlider.value()
+        vMax = self.ui.vMaxSlider.value()
+        hueShift = 0
+        if h < 20 or h > 160:
+            hueShift = 60
+        colorLower = ((h-5 + hueShift)%180, sMin, vMin)
+        colorUpper = ((h+5 + hueShift)%180, 255, vMax)
+        blurred = cv2.GaussianBlur(img, (31, 31), 0)
+        hsv = cv2.cvtColor(blurred, cv2.COLOR_BGR2HSV)
+        hsv[:,:,0] = (hsv[:,:,0] + hueShift)%180
+        mask = cv2.inRange(hsv, colorLower, colorUpper )
+        # Refine mask
+        mask = cv2.erode(mask, None, iterations=1)
+        mask = cv2.dilate(mask, None, iterations=2)
+        return mask
+
+
     def get_centroid(self,maskImage):
         # With help from http://www.pyimagesearch.com/2015/09/14/ball-tracking-with-opencv/
         # find contours in the mask and initialize the current
@@ -233,35 +258,16 @@ class MyWindow(QtGui.QMainWindow):
         # Otherwise return nonsense
         return None
 
-    def segment(self,img):
-        # Convert to HSV and mask colors
-
-        h = self.ui.hSlider.value()
-        sMin = self.ui.sMinSlider.value()
-        vMin = self.ui.vMinSlider.value()
-        vMax = self.ui.vMaxSlider.value()
-        hueShift = 0
-        if h < 20 or h > 160:
-            hueShift = 60
-        colorLower = ((h-5 + hueShift)%180, sMin, vMin)
-        colorUpper = ((h+5 + hueShift)%180, 255, vMax)
-        blurred = cv2.GaussianBlur(img, (31, 31), 0)
-        hsv = cv2.cvtColor(blurred, cv2.COLOR_BGR2HSV)
-        hsv[:,:,0] = (hsv[:,:,0] + hueShift)%180
-        mask = cv2.inRange(hsv, colorLower, colorUpper )
-        # Refine mask
-        mask = cv2.erode(mask, None, iterations=1)
-        mask = cv2.dilate(mask, None, iterations=2)
-        return mask
-
     def pose_callback(self, data):
-        # print "callback"
-        # perform tooltip offset
+
+        # Convert the DVRK pose to a 4x4 toolcenter_pose matrix to make it easy
         quaternion = (
             data.pose.orientation.x,
             data.pose.orientation.y,
             data.pose.orientation.z,
             data.pose.orientation.w)
+
+        # Create rotation matrix
         rot_matrix = tf.transformations.quaternion_matrix(quaternion)
 
         position = (
@@ -269,19 +275,21 @@ class MyWindow(QtGui.QMainWindow):
             data.pose.position.y,
             data.pose.position.z)
 
+        # Populate toolcenter_pose
         self.toolcenter_pose = np.identity(4)
 
         self.toolcenter_pose[0:3, 3] = np.transpose([position[0],
             position[1], position[2]])
         self.toolcenter_pose[0:3, 0:3] = rot_matrix[0:3, 0:3]
 
+        # TODO verify tooltip offset
         tooltip_transform = np.identity(4)
         tooltip_transform[2,3] = 0.013 # tool center is 13mm offset from the bulb
 
-        current_bulbcenter_pose = np.dot(self.toolcenter_pose, tooltip_transform)
+        bulb_pose = np.dot(self.toolcenter_pose, tooltip_transform)
 
         # return only the xyz position
-        self.current_bulbcenter_position = current_bulbcenter_pose[0:3, 3]
+        self.bulb_position = bulb_pose[0:3, 3]
 
     def updateLeftSlot(self):
 
@@ -330,16 +338,18 @@ class MyWindow(QtGui.QMainWindow):
         self.ui.rightGraphicsView.setScene(scene)
 
     def updateErrorSlot(self):
-        # compute error
-        p_robot = self.current_bulbcenter_position
-        tfp_camera = np.dot(self.R, p_robot) + self.t
+        # compute error TODO
+        
+        # p_robot = self.bulb_position
+        # tfp_camera = np.dot(self.R, p_robot) + self.t
 
-        p_camera = self.current_stereo_position
+        # p_camera = self.current_stereo_position
 
-        # print tfp_camera.shape, p_camera.shape
+        # # print tfp_camera.shape, p_camera.shape
 
-        error = np.linalg.norm(tfp_camera - p_camera)
-        self.ui.currentErrorLineEdit.setText(str(error * 1000))
+        # error = np.linalg.norm(tfp_camera - p_camera)
+        # self.ui.currentErrorLineEdit.setText(str(error * 1000))
+        pass
 
     def validateTransformCallback(self):
         self.emit(SIGNAL("updateError"))
@@ -351,7 +361,7 @@ class MyWindow(QtGui.QMainWindow):
             print "left not working"
             print e
 
-        self.segmentedL = self.segment(self.imageL)
+        self.segmentedL = self.mask(self.imageL)
 
         self.emit(SIGNAL("updateLeft"))
 
@@ -366,73 +376,70 @@ class MyWindow(QtGui.QMainWindow):
             print "right not working"
             print e
         
-        stored_position = self.current_bulbcenter_position #todo verify sync
+
+        # store the toolcenter pose
         stored_toolcenter_pose = self.toolcenter_pose #todo verify sync
 
-        self.segmentedR = self.segment(self.imageR)
-        # convI = self.bridge.cv2_to_imgmsg(self.segmentedR, "mono8")
+        self.segmentedR = self.mask(self.imageR)
 
-        if self.transform_loaded:
-            # convI = self.bridge.cv2_to_imgmsg(self.segmentedL, "mono8")
-            points3D = self.current_stereo_position
-            #points3D = np.dot(self.R, points3D.T)
-            #points3D = points3D.T + self.t
-            point2D = self.cam_model.left.project3dToPixel(self.current_bulbcenter_position)
-            point2D = (int(point2D[0]),int(point2D[1]))
-            print point2D
-            cv2.circle(self.imageL,point2D,5,(0,255,0),-1)
+        # If the transform has already been generated or loaded, draw it on screen for verification
+        # if self.transform_loaded:
         
         self.emit(SIGNAL("updateRight"))
 
         # TEST ONLY TODO
         self.automatic_registration_routine()
+
+    def visualize_transform(self):
+
+        points3D = self.current_stereo_position
+        #points3D = np.dot(self.R, points3D.T)
+        #points3D = points3D.T + self.t
+        point2D = self.cam_model.left.project3dToPixel(self.current_bulbcenter_position)
+        point2D = (int(point2D[0]),int(point2D[1]))
+        print point2D
+        cv2.circle(self.imageL,point2D,5,(0,255,0),-1)
         
-    def compute_ballcenter_3D_position(self):
+    def compute_bulb_position_by_stereo_triangulation(self):
+
+        # First, do a check if the images are available. If unavailable, return false
+
+        # Then, calculate the centroids.
+        # If centroids are not along epipolar lines, return false
         # centerL = self.get_centroid(self.segmentedL)
         # centerR = self.get_centroid(self.segmentedR)
         
         # if(centerL != None and centerR != None):
 
-            # a = (self.cam_model.projectPixelTo3d(centerL,centerL[0] - centerR[0]))
-            # self.current_stereo_position = np.array([[a[0], a[1], a[2]]])
+        # append to some array the 3d position along with the pose
 
-            # if(self.recording):
-                # # print(self.cam_model.projectPixelTo3d(centerL,centerL[0] - centerR[0]))
-
-                # self.recorded_stereo_positions = np.append(self.recorded_stereo_positions, 
-                        # np.array([[ a[0], a[1], a[2]]]), axis = 0)
-
-                # self.recorded_kinematic_positions = np.append(self.recorded_kinematic_positions, 
-                        # np.array([[ stored_position[0], stored_position[1], stored_position[2]]]), axis = 0)
-
-                # self.recorded_toolcenter_poses = np.append(self.recorded_toolcenter_poses, 
-                       # stored_toolcenter_pose, axis = 0)
-
-                # self.counter = self.counter + 1
-
-                # if self.counter % 10 == 0:
-                    # self.ui.capturedPairsLineEdit.setText(str(self.counter))
-        print "compute_ballcenter_3D_position called"
         pass
 
     def move_arm_to_poses(self):
         # read from table. if out of range. quit
+        # Send a command to dvrk to move there.
+        #Ensure you wait till it has done moved fully
         time.sleep(5)
         print "move_arm_to_poses called"
         self.arm_pose_counter += 1
 
     def automatic_registration_routine(self):
 
-        # repeat steps below
-
+        # Make sure we haven't done this before
         if self.arm_pose_counter < NUM_ARM_POSES:
 
-            # Make robot goto zero position first
-
+            # For every the cached poses
             for i in range(0, NUM_ARM_POSES):
-                print i
+                # Move arm to a cached pose
                 self.move_arm_to_poses()
-                self.compute_ballcenter_3D_position()
+
+                # Compute the 3D position of the ball center and store it
+                status = self.compute_bulb_position_by_stereo_triangulation()
+                
+                # if status = True, play good sound
+                # else, play bad sound
+
+            # TODO Now do Horn's method
 
         
     def horns_method(self, q, p):
@@ -459,5 +466,5 @@ class MyWindow(QtGui.QMainWindow):
 
 if __name__ == '__main__':
     app = QtGui.QApplication(sys.argv)
-    window = MyWindow()
+    window = AutomaticRegistration()
     sys.exit(app.exec_())
